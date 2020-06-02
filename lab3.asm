@@ -1,229 +1,281 @@
-CR equ 0dh
-                  
-ROW_COUNT equ 5
-COLUMN_COUNT equ 6
-          
-.model tiny
+.model small
+.stack 100h
 
-print_str macro out_str    ;print str
-    mov ah, 9
-    mov dx, offset out_str
-    int 21h
-endm
+.data    
+    numTen dw 000Ah 
+    sizeofNumber equ 2
+    numStrLen equ 20
+    numStr db numStrLen dup('$')
+    i dw ?
+    j dw ?
+    rows dw 5 
+    cols dw 6
+    matrsize dw 30
+    matr dw matrsize dup('$')    
+      
+    mes db "Enter matrix 5*6 value from -32768 to 32767",10,13,'$'
+    mesnum db 10,13, "Enter element: ",'$' 
+    messum db 10,13, "Sum of rows: ",'$'
+    newLine db 13,10,'$'        
+    space db " $"
+    mesover db 10,13,"overflow",'$'
+    mesonlynum db 10,13,"please enter numbers and signs",'$'
+    invalidStr db 10,13,"invalid string",'$'
+    tryAgain db 10,13,"try again",'$' 
+    
+    
+.code  
 
-read_str macro in_str        ;enter str
-    mov ah, 0ah
-    mov dx, offset in_str
-    int 21h
-endm
-
-.code
-.org 100h
-
-start proc
-    
-    xor si, si
-    mov cx, ROW_COUNT
-_scan_raws_loop:    
-    push cx
-    
-    print_str input_row_msg   ;outp message
-    read_str _mxln_row        ;input str
-    mov word ptr [g_str_offs], 0
-    
-    mov cx, COLUMN_COUNT
-_fill_row_loop:    
-    call scan_int             ;get int
-    mov row_arr[si], ax        ;fill array
-    add si, 2
-    loop _fill_row_loop
-    
-    print_str new_line_msg
-    
-    pop cx
-    loop _scan_raws_loop
-    
-;;;;;;;;;;;;;;;; sum_row ;;;;;;;;;;;;;;;;;;;;;;
-    
-    xor si, si 
-    sub di,2
-    mov cx, ROW_COUNT
-_column_sum_loop:
-    push cx
-    
-    add di,2  
-    mov cx, COLUMN_COUNT
-_row_loop:    
-    mov ax, row_arr[si]
-    add sum_row[di], ax
-	
-	jc _sum_overflow   ;if perenos perehod na metku
-	
-    add si, 2
-    loop _row_loop
-    
-    pop cx
-    loop _column_sum_loop
-    
-;;;; print
-    
-    xor bx, bx
-    xor ax, ax
-    xor si, si
-    
-    mov cx, 5
-    mov bx, 10
-print_sum:
-        xor di, di
-        xor ax, ax
-        std                    ; obratny poryadok zapisi
-		lea	di,StringEnd-1 ; posledniy simvol stroki String
-
-		mov ax, sum_row[si]      ;zapis summy
-Repeat:
-		xor	dx,dx         
-		div	bx             ; delim na 10
-                                       ; v ax chastnoe v dx ostatok
-		xchg	ax,dx          ; menyem ih mestami(nas interesuet ostatok
-		add	al,'0'         
-		stosb                  ; zapisyvaem cifru is al v stroky
-		xchg	ax,dx          ; vosstanavlivaem ax(chastnoe)
-		or	ax,ax          ; sravnivaem s 0
-		jne	Repeat         ; ne 0 povtoryem
-
-		mov	ah,9
-		lea	dx,[di+1]      ;nachalo stroki
-		int	21h            ;  
-    print_str new_line_msg
-    add si,2 
-    loop print_sum
-    jmp _end_of_prog
-    
-_sum_overflow:
-    print_str msg_sum_overflow
-
-_end_of_prog:        
-    xor ax, ax
-    mov ah, 4Ch
-    int 21h
-start endp
+inputNumbers proc    
+    lea dx,newLine
+    call outp
+    lea dx,mesnum 
+    call outp
+repInput:
+    lea dx,numStr
+    call inp                        ;enter number
+    lea si,numStr[2]
+    call parseStr            ;analis str
+    jc invalidInput
+    call loadNumber             ;load number
+    loop inputNumbers
+ret 
+invalidInput:
+    lea dx,newLine
+    call outp
+    lea dx,invalidStr
+    call outp 
+    jno tryAgainOutput    ;not overflow
+tryAgainOutput:              ;again enter
+    lea dx,tryAgain
+    call outp  
+    lea dx,mesnum
+    call outp
+    jmp repInput
+loadNumber:
+    mov [di],ax
+    add di,sizeofNumber
+ret
+inputNumbers endp
 
 
-
-is_digit proc
-    push bp
-    mov bp, sp
-    push bx
+;string to number translation
+parseStr proc
+    xor dx,dx
+    xor bx,bx
+    xor ax,ax
+    xor ch,ch
+    jmp inHaveSign  
+parseStrLoop:
+    mov bl,[si]     ;in bl our number
+    jmp isNumber 
+validStr:
+    sub bl,'0'        ;get digit
+    imul numTen
+    jo invalidStringOv      ;-digit
+    js invalidStringOv      ;overflow
+    cmp ch,1                ;negativ numb
+    je negativeAdd
+    add ax,bx
+    js invalidStringOv
+checkInvalid:
+    inc si
+    jmp parseStrLoop
+negativeAdd:
+    sub ax,bx
+    jo  invalidStringOv   ;overflow
+    jmp checkInvalid
+isNumber:
+    cmp bl,0Dh          ;end of str
+    je endParsing             
+    cmp bl,'0'
+    jl invalidString     ;<0
+    cmp bl,'9'
+    jg invalidString      ;>9
+    jmp validStr
+inHaveSign:
+    cmp [si],'-'
+    je negative
+    cmp [si],'+'
+    jne isNullStr         ;nothing enter
+    inc si
+    jmp isNullStr
+negative:
+    mov ch,1       ;negativ number
+    inc si
+    jmp isNullStr
     
-    mov ax, 0
-    mov bl, byte ptr [bp + 4]
-    cmp bl, '0'
-    jb _end
-    cmp bl, '9'
-    ja _end
-    mov ax, 1
-    
-_end:
-    pop bx    
-    pop bp
-    ret
-is_digit endp
-  
-; PROC :: scan_int :: PROC     
-; scans integer from g_row_str
-; @params: string
-; @ret_val: ax
-; @side_effects: changes the value of ax, and g_row_str
+isNullStr:
+    cmp [si],0Dh          ;enter str ended code 0dh
+    je invalidString    ;error string
+    jmp parseStrLoop
+invalidString:
+    lea dx,mesonlynum
+    call outp
+    xor ch,ch
+    stc
+ret   
+invalidStringOv:
+    lea dx,mesover
+    call outp
+    xor ch,ch
+    stc           ;setting cf perenos
+ret
+endParsing:
+    clc               ;sbros cf
+    xor ch,ch
+ret
+parseStr endp 
 
-scan_int proc
-    push bp
-    mov bp, sp 
-    push bx
+findsum proc
+    add ax,[si]
+    jo endAdd           ;overflow
+    add si,sizeofNumber
+    loop findsum
+endAdd:
+ret
+findsum endp
+
+sumOfRows proc  
+    lea dx,messum
+    call outp    
+    lea dx,newLine
+    call outp
+    mov i,0000h      ;columns
+    mov j,0000h
+    lea si,matr
+    jmp lop2
+lop1:  
+    lea dx,newLine
+    call outp
+    inc i
+    mov cx,i
+    cmp cx,rows    ;end sum
+    je lop2ret
+lop2:
+    mov cx,cols
+    xor ax,ax
+    call findsum
+    jo overflowSum  ;overflow
+    lea di,numStr[2]     ;start rou
+    call numberToString    ;output number
+    lea dx,numStr[2]
+    call outp
+    jmp lop1
+lop2ret:    
+ret   
+overflowSum:
+    lea dx,newLine
+    call outp
+    lea dx,mesover
+    call outp
+    jmp finish
+sumOfRows endp
+
+numberToString proc
+    push 0
+    push 0024h
+    add ax,0000h      ;setting symbol
+    js numberIsNegative  ;neg number
+numberToStrLoop:
+    xor dx,dx
+    div numTen    ;div 10
+    add dx,'0'      ;+ 0 for getting symbol
     push dx
-    push si
-    
-    xor ax, ax
-          
-_skip_space_loop:
-    mov si, [g_str_offs] ;start str
-    mov al, byte ptr row_str[si]  ;in al number
-    
-    cmp byte ptr row_str[si], CR      ;if end of str
-    je _pre_scan_int_loop
-    cmp byte ptr row_str[si], ' '    ;if not probel
-    jne _pre_scan_int_loop
-    
-    inc word ptr [g_str_offs]   ;next digit                                
-    jmp _skip_space_loop
-
-_pre_scan_int_loop:          
-    xor bx, bx
-    
-_scan_int_loop:
-    mov si, [g_str_offs]    ;on digit position
-    cmp byte ptr row_str[si], CR       ;end of str
-    je _end_scan_int                  ;end number
-    push word ptr row_str[si]
-    call is_digit
-    cmp ax, 1          ;if ax 1 is digit
+    cmp ax,0h         ;end str
+    jne numberToStrLoop 
+movenum:
     pop ax
-    jne _end_scan_int
-    
-    mov ax, 10
-    mul bx            ;mul our digit on 10
-    jc _cant_handle_big_numbers   ;appeare perenos
-    
-    mov dx, word ptr row_str[si]  ;in dx our digit
-    xor dh, dh
-    sub dx, '0'      ;get asci as our digit
-    
-    add ax, dx            ;add next digit to our number
-    jc _cant_handle_big_numbers
-    mov bx, ax              ;remember our digit
+    cmp al,'$'          ;end str
+    je endNumberToStr 
+    mov [di],al           ;write number
+    inc di               ;next position
+    jmp movenum
+endNumberToStr:
+    pop ax
+    mov [di],'$'
+ret     
+numberIsNegative:
+    mov [di],'-'
+    inc di
+    not ax  ;inverse
+    inc ax  ;add 1
+    jmp numberToStrLoop
+numberToString endp
 
-    inc word ptr [g_str_offs] ;next digit
-    jmp _scan_int_loop
-    
-_cant_handle_big_numbers:       ;big numbers
-    print_str new_line_msg
-    print_str msg_cant_handle_big_numbers
-    xor ax, ax
-    mov ah, 4Ch
+inpMatr proc 
+    xor cx,cx
+    mov cx,matrsize  
+    lea di,matr   
+    call inputNumbers
+    lea dx,newLine
+    call outp
+    ret
+inpMatr endp  
+      
+
+outpMatr proc
+    mov i,0000h
+    mov j,0000h
+    lea si,matr
+    jmp loop2
+loop1:
+    lea dx,newLine
+    call outp
+    mov j,0000h
+    inc i
+    mov cx,i
+    cmp cx,rows             ;end output
+    je loop2ret
+loop2:
+    mov ax,[si]                     ;get number
+    add si,sizeofNumber
+    lea di,numStr[2]           
+    call numberToString        ;write number to numStr
+    lea dx,numStr[2]
+    call outp
+    lea dx,space                ;out probel
+    call outp
+    inc j
+    mov cx,j
+    cmp cx,cols                       ;end str
+    jne loop2
+    jmp loop1
+loop2ret:   
+ret
+outpMatr endp
+
+
+inp proc 
+    mov ah,10
     int 21h
-             
-_end_scan_int:
-    mov ax, bx 
-    
-    pop si
-    pop dx
-    pop bx          
-    pop bp
-    ret    
-scan_int endp
+    ret
+inp endp    
+   
+   
+outp proc 
+    mov ah,9
+    int 21h
+    ret
+outp endp  
+   
 
-row_arr dw 0, 0, 0, 0, 0, 0
-        dw 0, 0, 0, 0, 0, 0
-        dw 0, 0, 0, 0, 0, 0
-        dw 0, 0, 0, 0, 0, 0
-        dw 0, 0, 0, 0, 0, 0
+start: 
 
-sum_row dw 0, 0, 0, 0, 0
+mov ax,@data
+mov ds,ax   
+mov es,ax
+xor ax,ax
 
-stack_top dw 0
-stack dw 0, 0, 0, 0, 0, 0
+mov [numStr],numStrLen
+lea dx,mes
+call outp 
+call inpMatr 
+call outpMatr
+call sumOfRows
 
-g_str_offs dw 0
-
-_mxln_row db 201   
-row_str_len db 0
-row_str db 200 dup(0)
-
-input_row_msg db "input row: ", '$'
-msg_input db "input number: ", 0ah, 0dh, '$'
-msg_cant_handle_big_numbers db "can't handle big numbers", 0ah, 0dh, '$'
-new_line_msg db 0ah, 0dh, '$'
-msg_sum_overflow db "sum overflow", 0ah, 0dh, '$'     
-String		db	5 dup (?),'$'  
-StringEnd	=	$-1            
-    
+finish:
+    mov ax,4c00h
+    int 21h
+   ends
 end start
