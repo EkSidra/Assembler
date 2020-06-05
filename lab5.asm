@@ -1,15 +1,15 @@
-in_sym macro 
+in_sym macro ;get symbol
     mov ah, 01h
     int 21h
     sub al, '0'
     xor ah, ah
 endm
-out_sym macro 
+out_sym macro ;output symbol
     mov ah, 02h
     int 21h
 endm
 
-out_str macro 
+out_str macro ;output str
     mov ah,9
     int 21h
 endm
@@ -23,7 +23,6 @@ start:
 	
 	cld 
 	mov bp, sp
-	;mov cl, cmd_length
 	mov cx, -1
 	mov di, offset cmd_line
 find_param:
@@ -70,7 +69,7 @@ skip1:
 	jmp exit
 	
 input_num: 
-	mov cx, ax         ;сохраняем идентификатор файла в cx
+	mov cx, ax       
 	pop ax
 	pop bx
 	push ax
@@ -91,7 +90,7 @@ input_num:
 	out_str
 	jmp exit
 skip5:
-	pop bx				;идентификатор файла в bx
+	pop bx				
 	xor bp, bp
 	xor si, si
 read_data:
@@ -121,20 +120,20 @@ output_number:
 	call ShowUInt16
 	jmp exit
 ShowUInt16       proc
-        mov     bx,     10              ;делитель (основание системы счисления)
-        mov     cx,     5               ;количество выводимых цифр
+        mov     bx,     10             
+        mov     cx,     5              
         @@div:
-                xor     dx,     dx      ;делим (dx:ax) на bx
+                xor     dx,     dx     
                 div     bx
-                add     dl,     '0'     ;преобразуем остаток деления в символ цифры
-                push    dx              ;и сохраняем его в стеке
-        loop     @@div                   ;да - повторить цикл выделения цифры
+                add     dl,     '0'   
+                push    dx           
+        loop     @@div                
 		mov     cx,     5 
         @@show:
-                mov     ah,     02h     ;функция ah=02h int 21h - вывести символ из dl на экран
-                pop     dx              ;извлекаем из стека очередную цифру
-                int     21h             ;и выводим её на экран
-        loop    @@show                  ;и так поступаем столько раз, сколько нашли цифр в числе (cx)        pop     bx
+                mov     ah,     02h   
+                pop     dx           
+                int     21h            
+        loop    @@show               
 ret
 endp
   
@@ -193,7 +192,7 @@ next1:
 	mov ax, dx
 	xor dx, dx
 	cmp ax, len
-	jge next
+	jbe next
 	;cmp ax, 0
 	;je next
 	inc si
