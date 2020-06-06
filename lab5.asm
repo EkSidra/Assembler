@@ -1,54 +1,54 @@
-in_sym macro ;get symbol
+in_sym macro 						;get symbol
     mov ah, 01h
     int 21h
     sub al, '0'
     xor ah, ah
 endm
-out_sym macro ;output symbol
+out_sym macro 						;output symbol
     mov ah, 02h
     int 21h
 endm
 
-out_str macro ;output str
+out_str macro 						;output str
     mov ah,9
     int 21h
 endm
 	.model tiny
 	.code
-	org 80h 
-	cmd_length db ? 
-	cmd_line db ? 
+	org 80h 				;smeschenie 80h ot start PSP
+	cmd_length db ? 			;dlina cmdline
+	cmd_line db ? 				;sama cmdline
 	org 100h 
 start:
 	
-	cld 
+	cld 					;for command strokovoy obrabotki
 	mov bp, sp
 	mov cx, -1
-	mov di, offset cmd_line
+	mov di, offset cmd_line  		;start cmd_line
 find_param:
 	mov al, ' '
-	repz scasb
-	dec di
+	repz scasb				;find no probel
+	dec di					;adress start parametr
 	push di
 	inc word ptr argc
 	mov si, di
 	
 scan_params:
-	lodsb
-	cmp al, 0Dh
+	lodsb					;read symbol from parametr
+	cmp al, 0Dh				;if 0Dh - last parametr
 	je params_ended
-	cmp al, 20h
+	cmp al, 20h			;sravnenie s probel
 	jne scan_params
 	
-	dec si
+	dec si				;first byte after parametr
 	mov byte ptr [si], 0
 	mov di, si
 	inc di
 	jmp short find_param
 	
 params_ended:
-	dec si
-	mov byte ptr [si], 0
+	dec si						;first byte after end
+	mov byte ptr [si], 0		;write 0
 	
 	mov cx, 2
 	cmp cx, wp argc
@@ -60,8 +60,8 @@ skip1:
 	xor si, si
 	pop dx
 	push dx
-	mov ah, 3Dh
-	mov al, 00h
+	mov ah, 3Dh 				 ;enter file
+	mov al, 00h     					;for reading
 	int 21h
 	jnc input_num
 	lea dx, msg3
@@ -69,22 +69,22 @@ skip1:
 	jmp exit
 	
 input_num: 
-	mov cx, ax       
+	mov cx, ax       ;identificator file
 	pop ax
 	pop bx
 	push ax
 	push cx
 	
 	xor     ax,ax                   
-    mov     di, bx               
+    mov     di, bx               ;number
     xor     ch,ch                   
     mov     cl, 5           
-    mov     si,10                   
+    mov     si,10                ;for mul   
     xor     bh,bh
     call input_number                   
     
-    mov     len, ax
-	cmp bp, 333
+    	mov len, ax		;length str
+	cmp bp, 333		;invalid argument
 	jne skip5
 	lea dx, msg6
 	out_str
@@ -94,23 +94,23 @@ skip5:
 	xor bp, bp
 	xor si, si
 read_data:
-	mov cx, 10000
-	mov dx,offset buffer 
-	mov ah,3Fh 
+	mov cx, 10000				;number bytes for read
+	mov dx,offset buffer 			;here read
+	mov ah,3Fh 			;read from file
 	int 21h 
 	jc close_file 
-	mov cx,ax 
-	jcxz close_file
+	mov cx,ax 			;count read bytes
+	jcxz close_file			;if cx = 0
 	call find_str 
 	jmp short read_data 
 	
 close_file:
-mov dx, wp border_size
+	mov dx, wp border_size
 	cmp dx, len
 	jge next2
 	inc si
 next2:
-	mov ah,3Eh 
+	mov ah,3Eh   ;close file
 	int 21h
 	
 output_number:	
@@ -138,7 +138,7 @@ ret
 endp
   
 exit:
-	mov ah,3Eh 
+	mov ah,3Eh 			;close file
 	int 21h
 	int 20h
 
@@ -151,25 +151,29 @@ new_line proc
 ret
 endp
 
-input_number proc
+input_number proc			;get our entered number
 m1:
-	cmp  byte ptr [di], 0
+	cmp  byte ptr [di], 0		;nothing enter
 	je end_inp_num
-    mul     si                      
+    imul     si 
+    jc err_msg 
+    jo err_msg                    
     mov     bl,[di] 
-    cmp     bl, 30h                
+    cmp     bl, 30h      					;<0                
     jl      err_msg
-    cmp     bl, 39h                
+    cmp     bl, 39h 						;>9               
     jg      err_msg                  
     sub     bl,30h                  
-    add     ax,bx                   
+    add     ax,bx
+    jc err_msg 
+    jo err_msg                
     inc     di                      
     loop    m1 
 end_inp_num:
     ret
 jmp skip3	
 err_msg:
-	mov bp, 333
+	mov bp, 333		;invalid argument
 	ret	
 skip3:
 endp
@@ -182,25 +186,21 @@ find_str proc
 	mov dx, wp border_size
 	lea di, buffer 
 loop1:
-	cmp byte ptr [di], 0Dh
+	cmp byte ptr [di], 0Dh		;back CR
 	je next1
-	;cmp byte ptr [di], 0Ah
-	;je next1
 	inc dx
 	jmp next
-next1:
+next1:						;proverka
 	mov ax, dx
 	xor dx, dx
 	cmp ax, len
-	jbe next
-	;cmp ax, 0
-	;je next
+	jge next				;length str more than input number
 	inc si
 next:
 	inc di
 loop loop1
     mov word ptr border_size, dx
-	xor ax,ax
+    xor ax,ax
     pop cx
     pop dx
     pop di  
@@ -210,7 +210,7 @@ endp
 	wp equ word ptr
 	len dw 0
 	border_size dw 0
-	buffer db 10000 dup(0)
+	buffer db 1000 dup(0)
 	msg1 db 0Dh, 0Ah,"Vvedite dlinu stroki",0Dh, 0Ah,'$'
 	msg2 db 0Dh, 0Ah,"Chislo strok = ",'$'
 	msg3 db 0Dh, 0Ah,"Fail ne naiden!",0Dh, 0Ah,'$'
