@@ -1,225 +1,334 @@
-﻿in_sym macro 
-    mov ah, 01h
-    int 21h
-    sub al, '0'
-    xor ah, ah
-endm
-out_sym macro 
-    mov ah, 02h
-    int 21h
-endm
+.model small
+.stack 100h
+.data
+sumbl db 1 dup(0)
+argc dw 0
+maxcmdsize equ 125
+cmd_length dw ?
+cmd_line db maxcmdsize+2,?,maxcmdsize dup(?)
+buf db maxcmdsize+2,?,maxcmdsize dup('$')  
+filename db 126 dup("$")
+localsize dw 0
+number dw 0
+stringinfile dw 0
+StringFileOpenMsg db "File was opened ", 13,10, "$"
+StringFileCloseMsg db "File was closed ", 13,10, "$"
+StringErrorComandLineMsg db "Comand Line Error size",13,10,"$"
+StringFileErrorOpenMsg db "File Error Open", 13,10, "$"
+StringFileErrorCloseMsg db "File Error Close", 13,10, "$"
+StringBeginMsg db "The program has begun ", 13,10, "$"
+StringErrorParsMsg db "Error pars params in comand line",13,10,"$" 
+StringErrorOwerflowMsg db "Error Owerflow of size: size your entered biger then 65535",13,10,"$"
+StringEndMsg db "The program has end ", 13,10, "$"
+StringinFileMsg db "The number of the matching line in the file: $"
+StringAmpleAmountMsg db "Satisfying number of lines: $"
+StringNewStr db 13,10,"$"
+StringScobka db ") $"
+StringSizeMsg db ".   size: $"
+StringPlusMsg db " + $"
+flag db 0
+counter db 0
+.code
 
-out_str macro 
+
+Print_str macro msg
+    push ax
+    push dx
     mov ah,9
+    mov dx,offset msg
     int 21h
-endm
-	.model tiny
-	.code
-	org 80h 
-	cmd_length db ? 
-	cmd_line db ? 
-	org 100h 
-start:
-	
-	cld 
-	mov bp, sp
-	;mov cl, cmd_length
-	mov cx, -1
-	mov di, offset cmd_line
-find_param:
-	mov al, ' '
-	repz scasb
-	dec di
-	push di
-	inc word ptr argc
-	mov si, di
-	
-scan_params:
-	lodsb
-	cmp al, 0Dh
-	je params_ended
-	cmp al, 20h
-	jne scan_params
-	
-	dec si
-	mov byte ptr [si], 0
-	mov di, si
-	inc di
-	jmp short find_param
-	
-params_ended:
-	dec si
-	mov byte ptr [si], 0
-	
-	mov cx, 2
-	cmp cx, wp argc
-	je skip1
-	lea dx, msg5
-	out_str
-	jmp exit
-skip1:	
-	xor si, si
-	pop dx
-	push dx
-	mov ah, 3Dh
-	mov al, 00h
-	int 21h
-	jnc input_num
-	lea dx, msg3
-	out_str
-	jmp exit
-	
-input_num: 
-	mov cx, ax         ;сохраняем идентификатор файла в cx
-	pop ax
-	pop bx
-	push ax
-	push cx
-	
-	xor     ax,ax                   
-    mov     di, bx               
-    xor     ch,ch                   
-    mov     cl, 5           
-    mov     si,10                   
-    xor     bh,bh
-    call input_number                   
-    
-    mov     len, ax
-	cmp bp, 333
-	jne skip5
-	lea dx, msg6
-	out_str
-	jmp exit
-skip5:
-	pop bx				;идентификатор файла в bx
-	xor bp, bp
-	xor si, si
-read_data:
-	mov cx, 10000
-	mov dx,offset buffer 
-	mov ah,3Fh 
-	int 21h 
-	jc close_file 
-	mov cx,ax 
-	jcxz close_file
-	call find_str 
-	jmp short read_data 
-	
-close_file:
-mov dx, wp border_size
-	cmp dx, len
-	jge next2
-	inc si
-next2:
-	mov ah,3Eh 
-	int 21h
-	
-output_number:	
-	lea dx, msg2
-	out_str
-	mov ax, si
-	call ShowUInt16
-	jmp exit
-ShowUInt16       proc
-        mov     bx,     10              ;делитель (основание системы счисления)
-        mov     cx,     5               ;количество выводимых цифр
-        @@div:
-                xor     dx,     dx      ;делим (dx:ax) на bx
-                div     bx
-                add     dl,     '0'     ;преобразуем остаток деления в символ цифры
-                push    dx              ;и сохраняем его в стеке
-        loop     @@div                   ;да - повторить цикл выделения цифры
-		mov     cx,     5 
-        @@show:
-                mov     ah,     02h     ;функция ah=02h int 21h - вывести символ из dl на экран
-                pop     dx              ;извлекаем из стека очередную цифру
-                int     21h             ;и выводим её на экран
-        loop    @@show                  ;и так поступаем столько раз, сколько нашли цифр в числе (cx)        pop     bx
-ret
-endp
-  
-exit:
-	mov ah,3Eh 
-	int 21h
-	int 20h
+    pop dx
+    pop ax
+endm 
 
-new_line proc 
-    mov dl, 0Ah
-    out_sym
-    mov dl, 0Dh
-    out_sym
-    xor bp, bp
-ret
-endp
 
-input_number proc
-m1:
-	cmp  byte ptr [di], 0
-	je end_inp_num
-    imul     si
-    jc err_msg
-    jo err_msg                       
-    mov     bl,[di] 
-    cmp     bl, 30h                
-    jl      err_msg
-    cmp     bl, 39h                
-    jg      err_msg                  
-    sub     bl,30h                  
-    add     ax,bx
-    jc err_msg
-    jo err_msg                   
-    inc     di                      
-    loop    m1 
-end_inp_num:
+Show_AX proc
+    push bx
+    push cx
+    push dx
+    push ax
+    mov bx, 10
+    xor cx,cx
+Convert:
+    xor dx,dx
+    div bx           
+    add dl, 30h
+    push dx          
+    inc cx           
+    or ax, ax
+    jnz Convert
+Show1:
+    pop dx 
+    mov ah,2           
+    int 21h
+    dec cx            
+    jnz Show1
+    pop ax
+    pop dx
+    pop cx
+    pop bx
     ret
-jmp skip3	
-err_msg:
-	mov bp, 333
-	ret	
-skip3:
-endp
+Show_AX endp
 
-find_str proc
+IsEnough proc
+    inc stringinfile
+    push bx
+    cmp counter,0
+    jg finaly
+    cmp si,localsize
+    jle EndIsEnough
+finaly:    
+    inc number
+    push ax			;
+    mov ax,number			;
+    call Show_AX			;
+    pop ax				;
+    Print_str StringScobka		;
+    Print_str StringinFileMsg		;
+    push ax
+    mov ax,stringinfile		;
+    call Show_AX			;
+    Print_str StringSizeMsg		;
+    cmp counter,0
+    je finaly2
+    push ax
+    push cx
+    xor cx,cx
+    mov cl,counter
+    mov ax,65535 
+IsEnoughCycle:
+    call Show_AX
+    Print_str StringPlusMsg
+    loop IsEnoughCycle
+    pop cx
+    pop ax
+finaly2:        
+    mov ax,si			;
+    call Show_AX			;
+    pop ax
+    
+    Print_str StringNewStr		;
+EndIsEnough:
+    pop bx    
+    ret
+IsEnough endp
+
+Makeparams proc
+    push si
     push di
     push dx
     push cx
-	
-	mov dx, wp border_size
-	lea di, buffer 
-loop1:
-	cmp byte ptr [di], 0Dh
-	je next1
-	;cmp byte ptr [di], 0Ah
-	;je next1
-	inc dx
-	jmp next
-next1:
-	mov ax, dx
-	xor dx, dx
-	cmp ax, len
-	jge next
-	;cmp ax, 0
-	;je next
-	inc si
-next:
-	inc di
-loop loop1
-    mov word ptr border_size, dx
-	xor ax,ax
+    xor si,si
+    xor di,di   
+sravn:    
+    cmp cmd_line[si],' '
+    jne nextstep
+    call SkipSpaces
+    inc argc
+    cmp argc,2
+    je second
+    cmp argc,3
+    je third
+nextstep:
+    mov dl,cmd_line[si]
+    mov buf[di],dl
+    inc di
+    inc si
+    xor dx,dx
+    mov dx,cmd_length
+    cmp si,dx
+    jne sravn
+    jmp third 
+second:
+    mov cx,di
+    xor di,di
+secondcycle:
+    xor dx,dx
+    mov dl,buf[di]
+    mov filename[di],dl
+    mov buf[di],"$"
+    inc di
+    loop secondcycle
+    mov filename[di],0
+    xor di,di
+    jmp sravn
+third:
+    mov cx,di
+    xor di,di
+thirdcycle:
+    cmp buf[di],30h
+    jl ErrorEnded2
+    cmp buf[di],39h
+    jg ErrorEnded2
+    push ax
+    push bx
+    mov bx,10
+    mov ax,localsize
+    mul bx
+    mov localsize,ax
+    pop bx
+    pop ax
+    jc ErrorEnded1
+    
+    
+    push ax
+    xor ax,ax
+    mov al,buf[di]
+    sub al,30h
+    add localsize,ax
+    pop ax
+    jc ErrorEnded1
+    inc di
+    loop thirdcycle
+    jmp EndMakeparams    
+ErrorEnded1:
     pop cx
-    pop dx
-    pop di  
-ret    
-endp
-	argc dw 0 
-	wp equ word ptr
-	len dw 0
-	border_size dw 0
-	buffer db 10000 dup(0)
-	msg1 db 0Dh, 0Ah,"Vvedite dlinu stroki",0Dh, 0Ah,'$'
-	msg2 db 0Dh, 0Ah,"Chislo strok = ",'$'
-	msg3 db 0Dh, 0Ah,"Fail ne naiden!",0Dh, 0Ah,'$'
-	msg4 db 0Dh, 0Ah,"Makcimalnaya dlina stroki < 50 symb!!",0Dh, 0Ah,'$'
-	msg5 db 0Dh, 0Ah,"Kol-vo argumentov dolzhno byt 2!!!",0Dh, 0Ah,'$'
-	msg6 db 0Dh, 0Ah,"Invalid argument!!!",0Dh, 0Ah,'$'
+    Print_str StringErrorOwerflowMsg
+    jmp ErrorEnds        
+ErrorEnded2:
+    Print_str StringErrorParsMsg
+ErrorEnds:
+    pop cx    
+    pop dx    
+    pop si
+    pop di
+    jmp Exit                      
+EndMakeparams:
+    pop cx    
+    pop dx    
+    pop si
+    pop di
+    ret
+Makeparams endp        
+
+SkipSpaces proc
+SkipCycle:    
+    cmp cmd_line[si],' '
+    je skip
+    jmp EndSkip
+skip:
+    inc si
+    jmp SkipCycle
+EndSkip:    
+    ret
+SkipSpaces endp    
+
+
+start:
+    mov ax, @data
+    mov es, ax
+    
+    xor cx,cx
+    mov cl,ds:[80h]
+    mov bx,cx
+    mov si,81h
+    mov di,offset cmd_line
+    rep movsb
+    
+    mov ds,ax
+    Print_str StringBeginMsg
+    mov cmd_length,bx
+
+    call Makeparams    
+    
+    mov dx,offset filename
+    mov ah,3Dh
+    mov al,00h
+    int 21h
+    jc ErrorExit2 
+    Print_str StringFileOpenMsg
+    mov bx,ax
+    mov di,01
+    push si
+Cycle:    
+    call Read
+    jmp Cycle
+Close:
+    call Ended
+    jmp Exit
+    
+ErrorExit1:    
+    Print_str StringErrorComandLineMsg
+    jmp Exit
+ErrorExit2:
+    Print_str StringFileErrorOpenMsg
+    jmp Exit
+ErrorExit3:
+    Print_str StringFileErrorCloseMsg                
+Exit:
+    Print_str StringEndMsg    
+    mov ax, 4c00h
+    int 21h
+
+Read proc
+    push cx
+    push si
+    xor si,si
+    mov cx,1
+ReadCycle:    
+    mov dx,offset sumbl
+    mov ah,3Fh
+    int 21h
+    jc ErrorExit2
+    mov cx,ax
+    jcxz Close 
+    
+    ;mov ah,40h
+    ;xchg bx,di
+    ;int 21h
+    ;xchg di,bx
+    ;jc Close
+    
+    inc si
+    cmp si,65535
+    je @count
+lstep:    
+    cmp sumbl,13
+    je EndRead333
+    cmp sumbl,10
+    je EndRead0 
+    jmp ReadCycle
+@count:
+    inc counter
+    jmp lstep    
+EndRead333:
+    mov flag,1
+    jmp EndRead
+EndRead0:
+    cmp flag,1
+    jne EndRead
+    mov flag,0
+    dec stringinfile         
+EndRead:
+    dec si     
+    call IsEnough   
+    pop si
+    pop cx
+    ret
+Read endp
+    
+Ended proc
+    cmp buf,13
+    call IsEnough
+    mov ah,3Eh
+    int 21h
+    jc ErrorExit3 
+    Print_str StringNewStr
+    Print_str StringAmpleAmountMsg
+    push ax
+    mov ax,number
+    call Show_AX
+    pop ax
+    Print_str StringNewStr
+    Print_str StringFileCloseMsg
+    jmp endEnded
+ErrorExitl:
+    Print_str StringFileErrorCloseMsg                
+    Print_str StringEndMsg    
+    mov ax, 4c00h
+    int 21h
+endEnded:    
+    ret
+Ended endp        
+
 end start
